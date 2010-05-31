@@ -29,7 +29,9 @@ int check_MB_availability(int abcd_address, int current_mb_num, int mb_number_a_
 void Record_MV_SAD(Block_jl *current_block, int curr_MB_addr);
 
 void Stat_calculation(int offset_x, int offset_y, int SAD_center, int best_SAD, int SAD_AVG_pred, int SAD_MIN_pred, int SAD_MED_pred);
-
+int Decide_A_Number_In_A_Range(int current_numbe,
+	                       int index_min,
+			       int index_max);    
 void free_mem2D(byte **array2D);
 void free_mem2Dint(int **array2D);
 void free_mem3D(byte ***array2D, int frames);

@@ -66,7 +66,8 @@ const int DIST[65]=
     6272, 6498, 6728, 6962, 7200, 7442, 7688, 7938, 
     8192
 }; 
-long long int  SUM_SAD_RATIO[65];
+//long long int  SUM_SAD_RATIO[65];
+double  SUM_SAD_RATIO[65];// all the ratio is float number, therefore, we'd better to set a double data for the sum in order to provide big enough float/double data.
 int  NO_SAD_RATIO[65]; 
 
 
@@ -1082,6 +1083,7 @@ Decide_A_Number_In_A_Range(int current_number,
 						     // Therefore, when using index_min to get the corresponding DIST value, a decision should be made for protection
     int max = DIST[index_max];
 
+    // ^^NOTE^^:
     // "==" conditions:
     // [1] (min = max) & (current_number == 0)
     //     therefore index_min = index_max. Only three number all are 0
@@ -1120,7 +1122,7 @@ Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
     float r_sad_center_avg, r_sad_center_min, r_sad_center_med;
 
     /*0. To calculate the Euclide Distance of the best MV*/
-    d = offset_x*offset_x + offset_x*offset_y;
+    d = offset_x*offset_x + offset_y*offset_y;
 
     /*1. AVG_SAD part*/
     if((SAD_AVG_pred == 0)||(SAD_AVG_pred == 1000000))
@@ -1154,7 +1156,7 @@ Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
 
 
     /*****************************************************************************
-     *            Catergory all the sad_ration based on MV length range
+     *            Group all the sad_ration based on MV length range
      * Calculate if a MV lenght in a range 
      * and gotten the corresponding sum_ratio & avg_ratio 
      ******************************************************************************/ 
@@ -1176,10 +1178,18 @@ Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
 
 
 
+/*
+    // -=[2010-05-31]=-
+    // The rest part of this function is the pre-written code for record all of 3 types of SAD ratio
+    // into a file, and feed them into Matlab to get the statistics data.
+    // However, after the version 2.0 [2010-05-31]. The statistics process are built inside this program.
+    // therefore, the following part of code is negligible.
+   
 
-    /*****************************************
-     * Write three ratio data into the file
-     * **************************************/
+    // *****************************************
+    //  Write three ratio data into the file
+    // *****************************************
+    
     if((p_stat_SAD_MV = fopen("stat_SAD_MV.txt", "r")) == 0) // check if the file exist
     {
 	if((p_stat_SAD_MV = fopen("stat_SAD_MV.txt", "a")) == NULL) // append new statistic at the end
@@ -1206,7 +1216,7 @@ Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
  
   //  return 0;
 
-
+*/
 }
 
 
@@ -1397,18 +1407,19 @@ int main(int argc,char **argv)
 	for(j = 0; j<mb_num_in_row*mb_num_in_col; j++)
 	fprintf(stderr,"\n ----------------------------------\n[JL-INFO09]MB_NO.[%d] all_mv record in a frame:[%d, %d] \n----------------------------------------\n", j, all_mv[j][0], all_mv[j][1]);
 	*/
-	}
-    
-    /*INFO*/
-   // fprintf(stderr,"[JL-INFO10] block_no_count [%d, %d] \n", blk_no_count, blk_no_count_1);
+    }
 
     /*INFO*/
+    // fprintf(stderr,"[JL-INFO10] block_no_count [%d, %d] \n", blk_no_count, blk_no_count_1);
+
+    /*INFO*/
+    // Fianl information. To show the ratio sum and number of stat ratio in every range. [0,0], [0,1], [1,2],...,[63,64]
     for(i=0; i<65; i++)
-    fprintf(stderr, "[JL-INFO11] SAD_MV_range_STAT is:%d, %lld, %d \n", i, SUM_SAD_RATIO[i], NO_SAD_RATIO[i]);
-    
-    
+	fprintf(stderr, "[JL-INFO11] SAD_MV_range_STAT is:%d, %f, %d \n", i, SUM_SAD_RATIO[i], NO_SAD_RATIO[i]);
+
+
     /*****************************************
-     * Write three ratio data into the file
+     * Write  into the file
      * **************************************/
     if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "r")) == 0) // check if the file exist
     {
@@ -1424,14 +1435,14 @@ int main(int argc,char **argv)
     {
 	fclose(p_stat_SAD_med_MV_range);
 	if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "a")) == NULL)
-        {
+	{
 	    fprintf(stderr,"Error Open File [2]!\n");
 	    //snprintf(errortext, ET_SIZE, "")
 	}
     }
 
     for(i=0; i<65; i++)
-    fprintf(p_stat_SAD_med_MV_range, "%5.3f ", (float)SUM_SAD_RATIO[i]/NO_SAD_RATIO[i]);
+	fprintf(p_stat_SAD_med_MV_range, "%5.3f ", (float)SUM_SAD_RATIO[i]/NO_SAD_RATIO[i]);
 
     fprintf(p_stat_SAD_med_MV_range, "\n");
     fclose(p_stat_SAD_med_MV_range);
