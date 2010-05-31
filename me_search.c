@@ -2,13 +2,16 @@
 #include "stdio.h"
 #include "string.h"
 #include "me_search.h"
+#include "time.h"
+
 #define MIN(a,b)  (((a) < (b)) ? (a) : (b)) 
 #define MAX(a,b)  (((a) > (b)) ? (a) : (b))
 /*Used in ME_SEARCH(), to determin the initial search position*/
 //#define START_SEARCH_00
 // OR
-#define START_SEARCH_PRED
+#define START_SEARCH_PRED // in row 858
 
+//#define DYNAMIC_SEARCH_RANGE_USE
 
 int blocksize = 4;
 char seqName[20];	//argv[1]
@@ -16,8 +19,8 @@ int width, height;   //argv[2]£¬ argv[3]
 int numFrames = 200;	//argv[4]
 //int search_range /*= 16*/; 	//argv[5]
 int refnum /*= 1*/;	//argv[6]
-
-
+int blk_no_count;
+int blk_no_count_1;
 //typedef unsigned char byte;    //!< byte type definition
 
 //For initSpiral() fuction.
@@ -47,9 +50,10 @@ unsigned char **out;
 FILE *seqFile;
 FILE *fmv, *fmse; // two files to record the MV and SAD info of searched blocks.
 FILE *p_stat_SAD_MV;// to be used in the function of Stat_calculation() 
+FILE *p_stat_SAD_med_MV_range; // for SAD_ratio stat based on MV length
 
 /*A const matrix for MV Euclidean distance*/
-/*
+
 const int DIST[65]=
 {
        0,    2,    8,   18,   32,   50,   72,   98, 
@@ -62,7 +66,10 @@ const int DIST[65]=
     6272, 6498, 6728, 6962, 7200, 7442, 7688, 7938, 
     8192
 }; 
-*/
+long long int  SUM_SAD_RATIO[65];
+int  NO_SAD_RATIO[65]; 
+
+
 /***********************************************************************
  *
  * \Input:
@@ -622,13 +629,37 @@ check_MB_availability(int abcd_address,
  *  dsr
  *
  ****************************************************************/
-int DYNAMIC_SEARCH_RANGE(int input_SR)
+int DYNAMIC_SEARCH_RANGE(float sad_relative_ratio_MED, int input_search_range_in_ME_SEARCH )
 {
     int dsr; /*output dynamic search range*/
 
-    /*if qcif*/
- 
-    return 0;
+    /*if QCIF*/
+
+    /*if CIF*/
+
+    if((sad_relative_ratio_MED < 4) && (sad_relative_ratio_MED >=3))
+    {
+	dsr = 3;
+	blk_no_count ++;
+    }
+    else if((sad_relative_ratio_MED < 3) && (sad_relative_ratio_MED >=2))
+    {
+	dsr = 1;
+	blk_no_count ++;
+    }
+    else if (sad_relative_ratio_MED < 2)/* && (sad_relative_ratio_MED >=3)*/
+    {
+	dsr = 32;
+	blk_no_count ++;
+	blk_no_count_1++;
+    }
+    else
+    {
+	dsr = input_search_range_in_ME_SEARCH;
+	blk_no_count ++;
+    }
+    /*if 4CIF*/
+    return dsr;
 
 }
 
@@ -674,6 +705,7 @@ ME_SEARCH(int SR,
     int search_center_x, search_center_y;
     int sad_of_search_center; 
     //	short pred_sad;
+    float DRR_med; // distortion relative ratio for SAD median value
     int dsr; //dynamic search range
 
     // Initilize two buffer, and flush them at the end of this function. These two buffer recored the MV and SAD info of 
@@ -696,6 +728,7 @@ ME_SEARCH(int SR,
 	    qmvx = 0;
 	    qmvy = 0;
 	    sad_of_search_center = 0; /*search center's sad value. the first one!*/
+	    DRR_med = 0.00;
 
 	    //pred_sad = 0;
 	    //t = 0;//3
@@ -745,7 +778,7 @@ ME_SEARCH(int SR,
 	     * [ME_1: search center position], 
 	     * [ME_2: left position except for the search center]
 	     * 
-	     * \Date: 2010/05/225
+	     * \Date: 2010/05/25
 	     **********************************************************/	    
 
 	    /*[ME_1: search the center position]*/
@@ -811,6 +844,24 @@ ME_SEARCH(int SR,
 		    sad_of_search_center = min_sad;
 
 
+		/* ---------------   Reset search range   ----------------
+		 *
+		 * Based on the previous gotten predicted SAD, 
+		 * plus the SAD value of the search center(the first search point in the search window)
+		 * we can predict a suitable search range for current block.*/
+		//pred_SAD_med = 
+
+		if((pred_SAD_med != -1000000) && (pred_SAD_med != 0))
+		{
+		    DRR_med = (float)sad_of_search_center/pred_SAD_med;
+
+#ifdef DYNAMIC_SEARCH_RANGE_USE
+		    current_search_range = DYNAMIC_SEARCH_RANGE(DRR_med, SR);
+#endif
+
+		    fprintf(stderr,"dsr is %d ||  SAD_center %d pred_SAD_med %d    DRR_MED is  %5.3f\n", current_search_range, sad_of_search_center, pred_SAD_med ,DRR_med);
+		}
+		/*else  search range keeps the original size */
 
 
 
@@ -821,8 +872,7 @@ ME_SEARCH(int SR,
 		////DYNAMIC_SEARCH_RANGE(pred_SAD_med,);
 
 		////current_search_range = 
-		/*[DSR 1:] fixed sr*/
-	        LoadSearchWindow(search_center_x, search_center_y, t , current_search_range/*, width, height*/);//5
+		/*[DSR 1:] fixed sr*/        LoadSearchWindow(search_center_x, search_center_y, t , current_search_range/*, width, height*/);//5
 		/*[DSR 2:] DSR sr*/
 		//LoadSearchWindow(search_center_x, search_center_y, t , dsr/*, width, height*/);//5
 
@@ -950,7 +1000,7 @@ ME_SEARCH(int SR,
 	    /* {Output_method1}*/ 
 	    /* Output shift_x and shift_y*/ 
 	    
-	    fprintf(stderr, "%3d %3d %5d %5d %5d %5d %5d\n", shift_x, shift_y, sad_of_search_center, min_sad, pred_SAD_avg, pred_SAD_min, pred_SAD_med);//8
+	    //888fprintf(stderr, "%3d %3d %5d %5d %5d %5d %5d\n", shift_x, shift_y, sad_of_search_center, min_sad, pred_SAD_avg, pred_SAD_min, pred_SAD_med);//8
 	    
 	    /* {Output_method2} */
 	    /* Output mv_x and mv_y */
@@ -1008,6 +1058,43 @@ Record_MV_SAD(Block_jl *current_block,
 
 }
 
+
+
+/**********************************************************************
+ *
+ *\Function: To check if a number in a range [MIN, MAX]
+ * 
+ * Input: Mot the min number or max number, but the index which will generate
+ *        the min number and max number.
+ *        Because the MV range here is varified with range. such as 
+ *        [0,0][0,1][1,2][2,3]...
+ *
+ *\Date: 2010-05-28
+ *
+ **********************************************************************/
+int 
+Decide_A_Number_In_A_Range(int current_number, 
+	                   int index_min, 
+			   int index_max)
+{
+    int min = DIST[(index_min < 0) ? 0 : index_min]; // the first group of here is [0,0], the left number is gotten by [i-1, i] in the outside program
+                                                     // so, it has chance to be -1, when i=0 and i-1=-1. 
+						     // Therefore, when using index_min to get the corresponding DIST value, a decision should be made for protection
+    int max = DIST[index_max];
+
+    // "==" conditions:
+    // [1] (min = max) & (current_number == 0)
+    //     therefore index_min = index_max. Only three number all are 0
+    // [2] (min != max) & (min < current_number <= max)
+    // [3] eliminate the left border, 
+    //     i.e. (1 < D <= 2), if D ==1, then return error feedback.
+    if(min == 0 && max == 0)
+	return MIN(max, current_number) == MAX(min, current_number);
+    else
+	return (MIN(min, current_number) == current_number) ? 0 : (MIN(max, current_number) == MAX(min, current_number));
+}
+
+
 /**********************************************************************
  *
  * \Fuction define:
@@ -1021,7 +1108,7 @@ Record_MV_SAD(Block_jl *current_block,
 
 //int
 void
-Stat_calculation(int offset_x, 
+Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
 	         int offset_y, 
 		 int SAD_center, 
 		 int best_SAD, 
@@ -1065,7 +1152,34 @@ Stat_calculation(int offset_x,
 	r_sad_center_med = (float)SAD_center/SAD_MED_pred;
     }
 
-    /*Write three ratio data into the file*/
+
+    /*****************************************************************************
+     *            Catergory all the sad_ration based on MV length range
+     * Calculate if a MV lenght in a range 
+     * and gotten the corresponding sum_ratio & avg_ratio 
+     ******************************************************************************/ 
+
+   if(r_sad_center_med != -1.00)
+   {
+       for(i = 0; i<65 ;i++)
+       {
+	   if(Decide_A_Number_In_A_Range(d, i-1, i))// in range [id(i-1), id(i)]
+	   {
+	       SUM_SAD_RATIO[i] += r_sad_center_med;
+	       NO_SAD_RATIO[i] += 1; 
+	       break;
+	   }
+       }
+   }
+   //else  // Do nothing! 
+
+
+
+
+
+    /*****************************************
+     * Write three ratio data into the file
+     * **************************************/
     if((p_stat_SAD_MV = fopen("stat_SAD_MV.txt", "r")) == 0) // check if the file exist
     {
 	if((p_stat_SAD_MV = fopen("stat_SAD_MV.txt", "a")) == NULL) // append new statistic at the end
@@ -1284,6 +1398,50 @@ int main(int argc,char **argv)
 	fprintf(stderr,"\n ----------------------------------\n[JL-INFO09]MB_NO.[%d] all_mv record in a frame:[%d, %d] \n----------------------------------------\n", j, all_mv[j][0], all_mv[j][1]);
 	*/
 	}
+    
+    /*INFO*/
+   // fprintf(stderr,"[JL-INFO10] block_no_count [%d, %d] \n", blk_no_count, blk_no_count_1);
+
+    /*INFO*/
+    for(i=0; i<65; i++)
+    fprintf(stderr, "[JL-INFO11] SAD_MV_range_STAT is:%d, %lld, %d \n", i, SUM_SAD_RATIO[i], NO_SAD_RATIO[i]);
+    
+    
+    /*****************************************
+     * Write three ratio data into the file
+     * **************************************/
+    if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "r")) == 0) // check if the file exist
+    {
+	if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "a")) == NULL) // append new statistic at the end
+	{
+	    fprintf(stderr,"Error Open File [1]!\n");
+	    //snprintf(errortext, ET_SIZE, "")
+	}
+	else
+	{}
+    }
+    else
+    {
+	fclose(p_stat_SAD_med_MV_range);
+	if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "a")) == NULL)
+        {
+	    fprintf(stderr,"Error Open File [2]!\n");
+	    //snprintf(errortext, ET_SIZE, "")
+	}
+    }
+
+    for(i=0; i<65; i++)
+    fprintf(p_stat_SAD_med_MV_range, "%5.3f ", (float)SUM_SAD_RATIO[i]/NO_SAD_RATIO[i]);
+
+    fprintf(p_stat_SAD_med_MV_range, "\n");
+    fclose(p_stat_SAD_med_MV_range);
+
+
+
+
+
+
+
 
     FreeMemory(refnum);
 
