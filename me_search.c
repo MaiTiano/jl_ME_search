@@ -11,7 +11,7 @@
 // OR
 #define START_SEARCH_PRED // in row 858
 
-//#define DYNAMIC_SEARCH_RANGE_USE
+#define DYNAMIC_SEARCH_RANGE_USE
 
 int blocksize = 4;
 char seqName[20];	//argv[1]
@@ -650,7 +650,7 @@ int DYNAMIC_SEARCH_RANGE(float sad_relative_ratio_MED, int input_search_range_in
     }
     else if (sad_relative_ratio_MED < 2)/* && (sad_relative_ratio_MED >=3)*/
     {
-	dsr = 32;
+	dsr = 0;
 	blk_no_count ++;
 	blk_no_count_1++;
     }
@@ -715,7 +715,7 @@ ME_SEARCH(int SR,
     get_mem2Dint(&all_mv, MB_NO_A_ROW*MB_NO_A_COL, 2);  // 352*288/16/16 is the MB number  
 
     for(k=0;k<2;k++)
-	pred_mv[k]=0;
+	pred_mv[k] = 0;
 
     //--- for every MB --- {1}
     for(currblk.blky = 0; currblk.blky < height; currblk.blky += blocksize)
@@ -852,11 +852,13 @@ ME_SEARCH(int SR,
 		 * we can predict a suitable search range for current block.*/
 		//pred_SAD_med = 
 
-		if((pred_SAD_med != -1000000) && (pred_SAD_med != 0))
+		if((pred_SAD_med != 1000000) && (pred_SAD_med != 0))
 		{
 		    DRR_med = (float)sad_of_search_center/pred_SAD_med;
 
-#ifdef DYNAMIC_SEARCH_RANGE_USE
+#ifdef DYNAMIC_SEARCH_RANGE_USE  // search range will be changed if DSR is used here.
+		                 //the change media is current_search_range
+
 		    current_search_range = DYNAMIC_SEARCH_RANGE(DRR_med, SR);
 #endif
 
@@ -872,13 +874,13 @@ ME_SEARCH(int SR,
 		/*[DSR] to change the search range dynamically according to the SAD ratio*/
 		////DYNAMIC_SEARCH_RANGE(pred_SAD_med,);
 
-		////current_search_range = 
-		/*[DSR 1:] fixed sr*/        LoadSearchWindow(search_center_x, search_center_y, t , current_search_range/*, width, height*/);//5
+		/*[DSR 1:] FIXED sr*/       
+		LoadSearchWindow(search_center_x, search_center_y, t , current_search_range/*, width, height*/);//5
 		/*[DSR 2:] DSR sr*/
 		//LoadSearchWindow(search_center_x, search_center_y, t , dsr/*, width, height*/);//5
 
 
-		for(k=1; k<maxSp; k++) //loop over full pel search points (spiral)
+		for(k = 1; k < maxSp; k++) //loop over full pel search points (spiral)
 		{
 		    // x, y is the center of search window, 
 		    // according to the search window load method 1 and 2. (IN LINE 288.)
@@ -932,14 +934,14 @@ ME_SEARCH(int SR,
 
 
 		}
-			    // end of full pel search
+		// end of full pel search
 
 		/*!
 		 *  Quarter Pixel Search Part
-			     *
+		 *
 
-				for(k=0; k<((z-1)*2+1)*((z-1)*2+1); k++) //loop over quad-pel search points 
-				{
+		 for(k=0; k<((z-1)*2+1)*((z-1)*2+1); k++) //loop over quad-pel search points 
+		 {
 				x = 32 + z_mvx*z + sx[k];	//approximated location for quad pel
 				y = 32 + z_mvy*z + sy[k];
 
@@ -948,8 +950,8 @@ ME_SEARCH(int SR,
 				sad=0;
 				for(i = 0; i<blocksize; i++)		//Calculate block distortion
 				{
-					for(j = 0; j<blocksize; j+=1)
-					{
+				for(j = 0; j<blocksize; j+=1)
+				{
 		//if(z==16)
 		//fprintf(stderr, "x+i*z = %d, y+j*z = %d\n", x+i*z, y+j*z);
 		sad += abs(curFrameY[blkx+i][blky+j]-searchwindow[x+i*z][y+j*z]);
@@ -986,7 +988,7 @@ ME_SEARCH(int SR,
 
 	    /* ---[JL-Stat] MV_X --- */
 	    shift_x = mvx - pred_mv_x;
-            shift_y = mvy - pred_mv_y;
+	    shift_y = mvy - pred_mv_y;
 
 	    //[INFO]
 	    //fprintf(stderr, "[JL-INFO3] SAD @ searchcenter is %d \n", sad_of_search_center);
@@ -996,18 +998,18 @@ ME_SEARCH(int SR,
 
 
 	    /*[JL-STAT] output to stderr, mvx, mvy, sad_center, sad_avg,....*/
-	    
-	     
+
+
 	    /* {Output_method1}*/ 
 	    /* Output shift_x and shift_y*/ 
-	    
-	    //888fprintf(stderr, "%3d %3d %5d %5d %5d %5d %5d\n", shift_x, shift_y, sad_of_search_center, min_sad, pred_SAD_avg, pred_SAD_min, pred_SAD_med);//8
+
+	    //fprintf(stderr, "%3d %3d %5d %5d %5d %5d %5d\n", shift_x, shift_y, sad_of_search_center, min_sad, pred_SAD_avg, pred_SAD_min, pred_SAD_med);//8
 	    
 	    /* {Output_method2} */
 	    /* Output mv_x and mv_y */
 	    //fprintf(stderr, "%3d %3d %5d %5d %5d %5d %5d\n", mvx, mvy, sad_of_search_center, min_sad, pred_SAD_avg, pred_SAD_min, pred_SAD_med);//8
-	    
-	    
+
+
 	    /*************************************************
 	     * \Function Call:
 	     * To get the statistics data for the MV and SAD
