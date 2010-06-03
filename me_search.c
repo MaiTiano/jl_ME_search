@@ -11,9 +11,11 @@
 // OR
 #define START_SEARCH_PRED // in row 858
 
-#define DYNAMIC_SEARCH_RANGE_USE
+//#define DYNAMIC_SEARCH_RANGE_USE
+#define VAR // when variance is need to be calculated!
 
-int blocksize = 4;
+
+int blocksize /* =4*/;
 char seqName[20];	//argv[1]
 int width, height;   //argv[2]£¬ argv[3]
 int numFrames = 200;	//argv[4]
@@ -50,8 +52,8 @@ unsigned char **out;
 FILE *seqFile;
 FILE *fmv, *fmse; // two files to record the MV and SAD info of searched blocks.
 FILE *p_stat_SAD_MV;// to be used in the function of Stat_calculation() 
-FILE *p_stat_SAD_med_MV_range; // for SAD_ratio stat based on MV length
-
+FILE *p_stat_avg_DRR_med; // for recording drr average  based on MV length interval
+FILE *p_stat_var_DRR_med; // for recording drr variance based on MV length interval
 /*A const matrix for MV Euclidean distance*/
 
 const int DIST[65]=
@@ -69,6 +71,13 @@ const int DIST[65]=
 //long long int  SUM_SAD_RATIO[65];
 double  SUM_SAD_RATIO[65];// all the ratio is float number, therefore, we'd better to set a double data for the sum in order to provide big enough float/double data.
 int  NO_SAD_RATIO[65]; 
+int ratio_index[65];
+#ifdef VAR
+float SAD_ratio[65][2000000];
+#endif
+
+
+
 
 
 /***********************************************************************
@@ -1120,7 +1129,7 @@ Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
 		 int SAD_MIN_pred, 
 		 int SAD_MED_pred)
 {
-    int d, i;
+    int d, i, j_ind;
     float r_sad_center_avg, r_sad_center_min, r_sad_center_med;
 
     /*0. To calculate the Euclide Distance of the best MV*/
@@ -1171,6 +1180,16 @@ Stat_calculation(int offset_x, // only shift matters, it is kinda MVD
 	   {
 	       SUM_SAD_RATIO[i] += r_sad_center_med;
 	       NO_SAD_RATIO[i] += 1; 
+	       
+
+	       ratio_index[i]++;
+	      // j_ind = ratio_index[i]++;
+#ifdef VAR
+
+	       SAD_ratio[i][/*j_ind*/ratio_index[i]] = r_sad_center_med;
+	       fprintf(stderr,"[INFO12] In the %d range, %5.3f, ||  %5.3fi \\\\\\\\ count is %d\n", i, SAD_ratio[i][ratio_index[i]], r_sad_center_med);
+#endif
+
 	       break;
 	   }
        }
@@ -1332,7 +1351,13 @@ int main(int argc,char **argv)
     int mb_num_in_row, mb_num_in_col;
     //--- Read configure data into the main function ---
     int search_range;
+    
+    float avg_DRR[65];
+    float var_DRR[65];
+    int j_index;
+    int count=0;
 
+    blocksize = atoi(argv[7]);
     refnum = atoi(argv[6]);
     //level = atoi(argv[6]);
     //base_mvres = 1;/* atoi(argv[5])*/;
@@ -1420,12 +1445,15 @@ int main(int argc,char **argv)
 	fprintf(stderr, "[JL-INFO11] SAD_MV_range_STAT is:%d, %f, %d \n", i, SUM_SAD_RATIO[i], NO_SAD_RATIO[i]);
 
 
-    /*****************************************
-     * Write  into the file
-     * **************************************/
-    if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "r")) == 0) // check if the file exist
+    /********************************************
+     * 
+     *         DRR  Average (mean value)
+     *
+     * Write  into the file:  STAT_AVG_DRR_MED
+     * ******************************************/
+    if((p_stat_avg_DRR_med = fopen("stat_avg_DRR_med.txt", "r")) == 0) // check if the file exist
     {
-	if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "a")) == NULL) // append new statistic at the end
+	if((p_stat_avg_DRR_med = fopen("stat_avg_DRR_med.txt", "a")) == NULL) // append new statistic at the end
 	{
 	    fprintf(stderr,"Error Open File [1]!\n");
 	    //snprintf(errortext, ET_SIZE, "")
@@ -1435,24 +1463,108 @@ int main(int argc,char **argv)
     }
     else
     {
-	fclose(p_stat_SAD_med_MV_range);
-	if((p_stat_SAD_med_MV_range = fopen("stat_SAD_med_MV_range.txt", "a")) == NULL)
+	fclose(p_stat_avg_DRR_med);
+	if((p_stat_avg_DRR_med = fopen("stat_avg_DRR_med.txt", "a")) == NULL)
 	{
 	    fprintf(stderr,"Error Open File [2]!\n");
 	    //snprintf(errortext, ET_SIZE, "")
 	}
     }
 
-    for(i=0; i<65; i++)
-	fprintf(p_stat_SAD_med_MV_range, "%5.3f ", (float)SUM_SAD_RATIO[i]/NO_SAD_RATIO[i]);
 
-    fprintf(p_stat_SAD_med_MV_range, "\n");
-    fclose(p_stat_SAD_med_MV_range);
+    /************************************
+     *   \ Results analysis
+     *   \ To get  DRR avg_drr, var_drr    
+     ************************************/
+    
+
+	//record the average sad_ratio for every interval, this file is used to plot the trend graph !
+	for(i=0; i<65; i++)
+	{
+	    avg_DRR[i] = (float)SUM_SAD_RATIO[i]/NO_SAD_RATIO[i];
+	    fprintf(p_stat_avg_DRR_med, "%5.3f ", avg_DRR[i] /*(float)SUM_SAD_RATIO[i]/NO_SAD_RATIO[i]*/);
+	}
+
+	fprintf(p_stat_avg_DRR_med, "\n");
+	fclose(p_stat_avg_DRR_med);
+
+
+	
+	
+
+	
+     /********************************************
+     * 
+     *               DRR Variance
+     *
+     * Write  into the file:  STAT_VAR_DRR_MED
+     * ******************************************/
+#ifdef VAR
+	
+	   for(i=0;i<65;i++)
+	   var_DRR[i]=0;
+	   
+
+	if((p_stat_var_DRR_med = fopen("stat_var_DRR_med.txt", "r")) == 0) // check if the file exist
+	{
+	    if((p_stat_var_DRR_med = fopen("stat_var_DRR_med.txt", "a")) == NULL) // append new statistic at the end
+	    {
+		fprintf(stderr,"Error Open File [1]!\n");
+		//snprintf(errortext, ET_SIZE, "")
+	    }
+	    else
+	    {}
+	}
+	else
+	{
+	    fclose(p_stat_var_DRR_med);
+	    if((p_stat_var_DRR_med = fopen("stat_var_DRR_med.txt", "a")) == NULL)
+	    {
+		fprintf(stderr,"Error Open File [2]!\n");
+		//snprintf(errortext, ET_SIZE, "")
+	    }
+	}
+
+	// Compute the variance of sad_ratio in every interval
+	/*To analysis --->  SAD_ratio[65][2000000] ,  here the 2nd dimension is defined by ratio_index[i]*/
+	for(i=0; i<65; i++)
+	{
+	    for(j_index = 0; j_index < ratio_index[i]; j_index++)
+	    {
+		var_DRR[i] += (SAD_ratio[i][j_index] - avg_DRR[i])*(SAD_ratio[i][j_index] - avg_DRR[i]);
+
+
+	    fprintf(stderr/*p_stat_var_DRR_med*/, "[JLINFO13] ----------------- [%d] %5.3f - %5.3f = %5.3f \n ", i, SAD_ratio[i][j_index], avg_DRR[i], SAD_ratio[i][j_index] - avg_DRR[i]); // write variance into file
+	    }
+	    
+	    if(ratio_index[i] !=0 )
+	    var_DRR[i] /= ratio_index[i]; // the variance is also should be divided by the number 
+	    
+	    //-1-. For output use
+	    fprintf(/*stderr*/p_stat_var_DRR_med, " %5.3f ", var_DRR[i]); // write variance into file
+
+	    //-2-. For debug use
+	    //fprintf(stderr/*p_stat_var_DRR_med*/, "[JLINFO13] %d %5.3f\n ", i, var_DRR[i]); // write variance into file
+	}
+
+	
+	/*
+	   for(i=0; i<65; i++)
+	   count += ratio_index[i];    
+	   fprintf(stderr, "total number is %d\n",count );
+	   */
+	
+	fprintf(p_stat_var_DRR_med, "\n");
+	fclose(p_stat_var_DRR_med);
 
 
 
 
+#endif
 
+
+
+    
 
 
 
